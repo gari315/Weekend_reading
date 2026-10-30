@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>英単語リスト</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#f5f7f9;--surface:#fff;--ink:#1d2733;--muted:#7a8794;--line:#dde3e9;--accent:#1f6f8b;--mask:#e3eaf0;--danger:#b4402f;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a20;--surface:#1b232b;--ink:#e6ebf0;--muted:#8d9aa7;--line:#2c3742;--accent:#6bb8d4;--mask:#2c3742;--danger:#e58a7b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141a20;--surface:#1b232b;--ink:#e6ebf0;--muted:#8d9aa7;--line:#2c3742;--accent:#6bb8d4;--mask:#2c3742;--danger:#e58a7b;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Noto Sans JP",system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);border-bottom:1px solid var(--line);padding:14px 16px;z-index:5}
+.bar{max-width:960px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+h1{font-size:18px;margin:0 8px 0 0}
+a{color:var(--accent);text-decoration:none}
+input[type=search],input[type=text],textarea{flex:1 1 200px;min-width:0;width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
+.bar input[type=search]{width:auto}
+textarea{min-height:120px;margin:8px 0}
+button{font:inherit;padding:8px 14px;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:var(--bg);cursor:pointer}
+button.ghost{background:none;color:var(--accent)}button.danger{background:none;color:var(--danger);border-color:var(--danger)}
+label{font-size:14px;color:var(--muted);display:flex;gap:6px;align-items:center;cursor:pointer}
+.count,.note{font-size:14px;color:var(--muted)}
+main{max-width:960px;margin:0 auto;padding:12px 16px 56px}
+.new{display:flex;gap:10px;margin:8px 0 20px}.new input{flex:1}
+.folder{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 4px;border-bottom:1px solid var(--line);color:var(--ink)}
+.folder b{font-weight:700;color:var(--accent);overflow-wrap:anywhere}
+.row{display:grid;grid-template-columns:minmax(120px,1.1fr) 3fr minmax(110px,1.2fr);gap:4px 20px;padding:12px 0;border-bottom:1px solid var(--line)}
+.head{font-size:13px;color:var(--muted);font-weight:500}
+.w{font-weight:700;color:var(--accent);overflow-wrap:anywhere}.d{font-size:15px}.na{color:var(--muted)}.j{font-weight:500}
+.mask .hide{background:var(--mask);color:transparent;border-radius:4px;cursor:pointer;user-select:none}
+.mask .hide.shown{background:none;color:inherit}.mask .hide.na.shown{color:var(--muted)}
+.gone{display:none}
+details{margin:16px 0;border:1px solid var(--line);border-radius:8px;padding:10px 14px;background:var(--surface)}
+summary{cursor:pointer;font-weight:500}
+.tools{display:flex;gap:10px;margin:28px 0 0}
+@media (max-width:640px){.row{grid-template-columns:1fr;gap:2px}.head{display:none}}
+</style></head><body>
+<header><div class="bar" id="bar"><h1>英単語リスト</h1></div></header>
+<main id="v"><p class="note">読み込み中…</p></main>
+<script>
+const $=s=>document.querySelector(s),v=$('#v'),bar=$('#bar');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let db=null,folders={},loaded=false,view='',st={q:'',hd:false,hj:false,hn:false};
+const fid=()=>location.hash.startsWith('#folder-')?location.hash.slice(8):null;
+function render(){
+  if(!loaded)return;
+  const id=fid();
+  if(id&&folders[id]){ if(view!=='f'+id){folderShell(id);} fillRows(id); }
+  else { view='home'; home(); }
+}
+function home(){
+  bar.innerHTML='<h1>英単語リスト</h1><span class="count">'+Object.keys(folders).length+' フォルダ</span>';
+  const ids=Object.keys(folders).sort((a,b)=>(folders[a].created||0)-(folders[b].created||0));
+  const keep=$('#nn')?$('#nn').value:'';
+  v.innerHTML='<div class="new"><input type="text" id="nn" placeholder="新しいフォルダ名" maxlength="60" aria-label="フォルダ名"><button id="mk">作成</button></div>'+
+   (ids.length?ids.map(i=>`<a class="folder" href="#folder-${i}"><b>${esc(folders[i].name)}</b><span class="count">${(folders[i].words||[]).length} 語</span></a>`).join(''):'<p class="note">フォルダがまだありません。名前を入力して作成してください。</p>');
+  $('#nn').value=keep;
+  $('#mk').onclick=mkFolder;
+  $('#nn').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)mkFolder()};
+}
+async function mkFolder(){
+  const n=$('#nn').value.trim();if(!n)return;
+  const id='f'+Date.now().toString(36);
+  try{await db.doc('folders/'+id).set({name:n,words:[],created:Date.now()});$('#nn').value='';}catch(e){alert('フォルダを作成できませんでした：'+(e.message||e.code))}
+}
+function folderShell(id){
+  view='f'+id;st={q:'',hd:false,hj:false,hn:false};
+  bar.innerHTML='<a href="#" id="back">フォルダ一覧</a><h1 id="ft"></h1><input type="search" id="q" placeholder="単語・意味で検索" aria-label="検索"><label><input type="checkbox" id="hd">英訳を隠す</label><label><input type="checkbox" id="hj">日本語を隠す</label><label><input type="checkbox" id="hn">取得不可を隠す</label><span class="count" id="c"></span>';
+  v.innerHTML='<div class="row head"><div>英単語</div><div>英訳</div><div>日本語の意味</div></div><div id="l"></div>'+
+   '<details><summary>単語を追加</summary><textarea id="ta" placeholder="英単語：英訳：日本語の意味　（1行に1語）"></textarea><button id="add">追加</button> <span class="note" id="am"></span></details>'+
+   '<div class="tools"><button class="ghost" id="ren">名前を変更</button><button class="danger" id="del">フォルダを削除</button></div>';
+  $('#q').oninput=e=>{st.q=e.target.value.trim().toLowerCase();apply()};
+  ['hd','hj','hn'].forEach(k=>$('#'+k).onchange=e=>{st[k]=e.target.checked;apply()});
+  $('#l').onclick=e=>{const t=e.target.closest('.hide');if(t)t.classList.toggle('shown')};
+  $('#add').onclick=()=>addWords(id);
+  $('#ren').onclick=async()=>{const n=prompt('新しいフォルダ名',folders[id].name);if(n&&n.trim())try{await db.doc('folders/'+id).update({name:n.trim()})}catch(e){alert('変更できませんでした')}};
+  $('#del').onclick=async()=>{if(confirm('「'+folders[id].name+'」を削除しますか？中の単語もすべて消えます。')){try{await db.doc('folders/'+id).delete();location.hash=''}catch(e){alert('削除できませんでした')}}};
+}
+function fillRows(id){
+  const f=folders[id];$('#ft').textContent=f.name;
+  $('#l').innerHTML=(f.words||[]).map(r=>{const na=r[1]==='取得不可';return `<div class="row" data-na="${na?1:0}" data-t="${esc((r.join(' ')).toLowerCase())}"><div class="w">${esc(r[0])}</div><div class="d${na?' na':''}">${esc(r[1])}</div><div class="j">${esc(r[2])}</div></div>`}).join('')||'<p class="note">単語がまだありません。「単語を追加」から入力してください。</p>';
+  apply();
+}
+function apply(){
+  let n=0;const rows=document.querySelectorAll('#l .row');
+  rows.forEach(r=>{const ok=(!st.q||r.dataset.t.includes(st.q))&&!(st.hn&&r.dataset.na==='1');r.classList.toggle('gone',!ok);if(ok)n++;
+    const d=r.children[1],j=r.children[2];d.classList.toggle('hide',st.hd);j.classList.toggle('hide',st.hj);
+    if(!st.hd)d.classList.remove('shown');if(!st.hj)j.classList.remove('shown');});
+  $('#l').classList.toggle('mask',st.hd||st.hj);
+  $('#c').textContent=n+' / '+rows.length+' 語';
+}
+async function addWords(id){
+  const add=[];let bad=0;
+  $('#ta').value.split('\n').forEach(l=>{l=l.trim();if(!l)return;const p=l.split(/\s*[：:]\s*/);
+    if(p.length>=3)add.push([p[0].replace(/'/g,'’'),p.slice(1,-1).join(': ').replace(/'/g,'’'),p[p.length-1]]);else bad++;});
+  if(!add.length){$('#am').textContent='追加できる行がありません（「英単語：英訳：日本語」の形式で入力してください）';return;}
+  try{await db.doc('folders/'+id).update({words:[...(folders[id].words||[]),...add]});$('#ta').value='';$('#am').textContent=add.length+'語を追加しました'+(bad?'（形式の違う'+bad+'行は除外）':'');}
+  catch(e){$('#am').textContent='追加できませんでした：'+(e.message||e.code)}
+}
+addEventListener('hashchange',()=>{window.scrollTo(0,0);render()});
+(async()=>{
+  const t=setTimeout(()=>{if(!loaded)v.innerHTML='<p class="note">データにまだ接続できません。しばらく待つか、ページを開き直してください。</p>'},10000);
+  try{db=await claude.use('db')}catch(e){db=null}
+  if(!db){clearTimeout(t);v.innerHTML='<p class="note">データを読み込めません。サインインした状態でこのページを開いてください。</p>';return;}
+  db.collection('folders').onSnapshot(s=>{clearTimeout(t);folders={};s.docs.forEach(d=>{folders[d.id]=d.data()});loaded=true;render()},e=>{v.innerHTML='<p class="note">読み込みに失敗しました：'+esc(e.message||e.code)+'</p>'});
+})();
+</script></body></html>
