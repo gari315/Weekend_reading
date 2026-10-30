@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>英単語リスト</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#f5f7f9;--surface:#fff;--ink:#1d2733;--muted:#7a8794;--line:#dde3e9;--accent:#1f6f8b;--mask:#e3eaf0;--danger:#b4402f;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a20;--surface:#1b232b;--ink:#e6ebf0;--muted:#8d9aa7;--line:#2c3742;--accent:#6bb8d4;--mask:#2c3742;--danger:#e58a7b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141a20;--surface:#1b232b;--ink:#e6ebf0;--muted:#8d9aa7;--line:#2c3742;--accent:#6bb8d4;--mask:#2c3742;--danger:#e58a7b;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Noto Sans JP",system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);border-bottom:1px solid var(--line);padding:14px 16px;z-index:5}
+.bar{max-width:960px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+h1{font-size:18px;margin:0 8px 0 0}
+a{color:var(--accent);text-decoration:none}
+input[type=search],input[type=text],textarea{flex:1 1 200px;min-width:0;width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
+.bar input[type=search]{width:auto}
+textarea{min-height:120px;margin:8px 0}
+button{font:inherit;padding:8px 14px;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:var(--bg);cursor:pointer}
+button.ghost{background:none;color:var(--accent)}button.danger{background:none;color:var(--danger);border-color:var(--danger)}
+label{font-size:14px;color:var(--muted);display:flex;gap:6px;align-items:center;cursor:pointer}
+.count,.note{font-size:14px;color:var(--muted)}
+main{max-width:960px;margin:0 auto;padding:12px 16px 56px}
+.new{display:flex;gap:10px;margin:8px 0 20px}.new input{flex:1}
+.folder{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 4px;border-bottom:1px solid var(--line);color:var(--ink)}
+.folder b{font-weight:700;color:var(--accent);overflow-wrap:anywhere}
+.row{display:grid;grid-template-columns:minmax(120px,1.1fr) 3fr minmax(110px,1.2fr);gap:4px 20px;padding:12px 0;border-bottom:1px solid var(--line)}
+.head{font-size:13px;color:var(--muted);font-weight:500}
+.w{font-weight:700;color:var(--accent);overflow-wrap:anywhere}.d{font-size:15px}.na{color:var(--muted)}.j{font-weight:500}
+.mask .hide{background:var(--mask);color:transparent;border-radius:4px;cursor:pointer;user-select:none}
+.mask .hide.shown{background:none;color:inherit}.mask .hide.na.shown{color:var(--muted)}
+.gone{display:none}
+details{margin:16px 0;border:1px solid var(--line);border-radius:8px;padding:10px 14px;background:var(--surface)}
+summary{cursor:pointer;font-weight:500}
+.tools{display:flex;gap:10px;margin:28px 0 0}
+@media (max-width:640px){.row{grid-template-columns:1fr;gap:2px}.head{display:none}}
+</style></head><body>
+<header><div class="bar" id="bar"><h1>英単語リスト</h1></div></header>
+<main id="v"><p class="note">読み込み中…</p></main>
+<script>
+const $=s=>document.querySelector(s),v=$('#v'),bar=$('#bar');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let db=null,folders={},loaded=false,view='',st={q:'',hd:false,hj:false,hn:false};
+const fid=()=>location.hash.startsWith('#folder-')?location.hash.slice(8):null;
+function render(){
+  if(!loaded)return;
+  const id=fid();
+  if(id&&folders[id]){ if(view!=='f'+id){folderShell(id);} fillRows(id); }
+  else { view='home'; home(); }
+}
+function home(){
+  bar.innerHTML='<h1>英単語リスト</h1><span class="count">'+Object.keys(folders).length+' フォルダ</span>';
+  const ids=Object.keys(folders).sort((a,b)=>(folders[a].created||0)-(folders[b].created||0));
+  const keep=$('#nn')?$('#nn').value:'';
+  v.innerHTML='<div class="new"><input type="text" id="nn" placeholder="新しいフォルダ名" maxlength="60" aria-label="フォルダ名"><button id="mk">作成</button></div>'+
+   (ids.length?ids.map(i=>`<a class="folder" href="#folder-${i}"><b>${esc(folders[i].name)}</b><span class="count">${(folders[i].words||[]).length} 語</span></a>`).join(''):'<p class="note">フォルダがまだありません。名前を入力して作成してください。</p>');
+  $('#nn').value=keep;v.insertAdjacentHTML('beforeend','<div class="tools"><button class="ghost" id="ex">データを書き出す</button></div><p class="note">新しく作ったフォルダや追加した単語は、このブラウザにだけ保存されます。</p>');$('#ex').onclick=exportData;
+  $('#mk').onclick=mkFolder;
+  $('#nn').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)mkFolder()};
+}
+async function mkFolder(){
+  const n=$('#nn').value.trim();if(!n)return;
+  const id='f'+Date.now().toString(36);
+  try{await db.doc('folders/'+id).set({name:n,words:[],created:Date.now()});$('#nn').value='';}catch(e){alert('フォルダを作成できませんでした：'+(e.message||e.code))}
+}
+function folderShell(id){
+  view='f'+id;st={q:'',hd:false,hj:false,hn:false};
+  bar.innerHTML='<a href="#" id="back">フォルダ一覧</a><h1 id="ft"></h1><input type="search" id="q" placeholder="単語・意味で検索" aria-label="検索"><label><input type="checkbox" id="hd">英訳を隠す</label><label><input type="checkbox" id="hj">日本語を隠す</label><label><input type="checkbox" id="hn">取得不可を隠す</label><span class="count" id="c"></span>';
+  v.innerHTML='<div class="row head"><div>英単語</div><div>英訳</div><div>日本語の意味</div></div><div id="l"></div>'+
+   '<details><summary>単語を追加</summary><textarea id="ta" placeholder="英単語：英訳：日本語の意味　（1行に1語）"></textarea><button id="add">追加</button> <span class="note" id="am"></span></details>'+
+   '<div class="tools"><button class="ghost" id="ren">名前を変更</button><button class="danger" id="del">フォルダを削除</button></div>';
+  $('#q').oninput=e=>{st.q=e.target.value.trim().toLowerCase();apply()};
+  ['hd','hj','hn'].forEach(k=>$('#'+k).onchange=e=>{st[k]=e.target.checked;apply()});
+  $('#l').onclick=e=>{const t=e.target.closest('.hide');if(t)t.classList.toggle('shown')};
+  $('#add').onclick=()=>addWords(id);
+  $('#ren').onclick=async()=>{const n=prompt('新しいフォルダ名',folders[id].name);if(n&&n.trim())try{await db.doc('folders/'+id).update({name:n.trim()})}catch(e){alert('変更できませんでした')}};
+  $('#del').onclick=async()=>{if(confirm('「'+folders[id].name+'」を削除しますか？中の単語もすべて消えます。')){try{await db.doc('folders/'+id).delete();location.hash=''}catch(e){alert('削除できませんでした')}}};
+}
+function fillRows(id){
+  const f=folders[id];$('#ft').textContent=f.name;
+  $('#l').innerHTML=(f.words||[]).map(r=>{const na=r[1]==='取得不可';return `<div class="row" data-na="${na?1:0}" data-t="${esc((r.join(' ')).toLowerCase())}"><div class="w">${esc(r[0])}</div><div class="d${na?' na':''}">${esc(r[1])}</div><div class="j">${esc(r[2])}</div></div>`}).join('')||'<p class="note">単語がまだありません。「単語を追加」から入力してください。</p>';
+  apply();
+}
+function apply(){
+  let n=0;const rows=document.querySelectorAll('#l .row');
+  rows.forEach(r=>{const ok=(!st.q||r.dataset.t.includes(st.q))&&!(st.hn&&r.dataset.na==='1');r.classList.toggle('gone',!ok);if(ok)n++;
+    const d=r.children[1],j=r.children[2];d.classList.toggle('hide',st.hd);j.classList.toggle('hide',st.hj);
+    if(!st.hd)d.classList.remove('shown');if(!st.hj)j.classList.remove('shown');});
+  $('#l').classList.toggle('mask',st.hd||st.hj);
+  $('#c').textContent=n+' / '+rows.length+' 語';
+}
+async function addWords(id){
+  const add=[];let bad=0;
+  $('#ta').value.split('\n').forEach(l=>{l=l.trim();if(!l)return;const p=l.split(/\s*[：:]\s*/);
+    if(p.length>=3)add.push([p[0].replace(/'/g,'’'),p.slice(1,-1).join(': ').replace(/'/g,'’'),p[p.length-1]]);else bad++;});
+  if(!add.length){$('#am').textContent='追加できる行がありません（「英単語：英訳：日本語」の形式で入力してください）';return;}
+  try{await db.doc('folders/'+id).update({words:[...(folders[id].words||[]),...add]});$('#ta').value='';$('#am').textContent=add.length+'語を追加しました'+(bad?'（形式の違う'+bad+'行は除外）':'');}
+  catch(e){$('#am').textContent='追加できませんでした：'+(e.message||e.code)}
+}
+addEventListener('hashchange',()=>{window.scrollTo(0,0);render()});
+const SEED={"h-2-10": {"name": "h_2_10", "words": [["own", "belonging to or done by a particular person or thing", "自分自身の、独自の"], ["dependent on", "取得不可", "〜に頼っている、〜次第である"], ["dependence", "the situation in which you need something or someone all the time, especially in order to continue existing or operating", "依存"], ["independence", "the ability to live your life without being helped or influenced by other people", "独立、自立"], ["a number of", "several of a particular type of thing", "いくつかの、多数の"], ["public transportation", "a system of vehicles such as buses and trains that operate at regular times on fixed routes and are used by the public", "公共交通機関"], ["except", "not including; but not", "〜を除いて"], ["practical", "relating to experience, real situations, or actions rather than ideas or imagination", "実用的な、現実的な"], ["adequate", "enough or satisfactory for a particular purpose", "十分な、適切な"], ["compared to", "取得不可", "〜と比べて"], ["can afford to", "取得不可", "〜する余裕がある"], ["go with", "If one thing goes with another, they suit each other or they look or taste good together", "〜に合う、〜と調和する"], ["prefer to", "to like, choose, or want one thing rather than another", "〜する方を好む"], ["situation", "the set of things that are happening and the conditions that exist at a particular time and place", "状況"], ["cause", "the reason why something, especially something bad, happens", "原因"], ["for one thing", "one reason is", "1つには"], ["add to", "to increase something, especially something bad or unpleasant", "〜を増やす、〜を悪化させる"], ["pollution", "damage caused to water, air, etc. by harmful substances or waste", "汚染"], ["recognize", "to know someone or something because you have seen or heard him or her or experienced it before", "認識する、〜だと分かる"], ["convenience", "the state of being convenient", "便利さ"], ["global warming", "a gradual increase in world temperatures caused by gases such as carbon dioxide that are collecting in the air around the earth and stopping heat escaping into space", "地球温暖化"], ["not only A but B", "取得不可", "AだけでなくBも"], ["entire", "whole or complete, with nothing missing", "全体の"], ["distance", "the amount of space between two places", "距離"], ["encourage", "to make someone more likely to do something, or to make something more likely to happen", "促す、励ます"], ["expansion", "the increase of something in size, number, or importance", "拡大、拡張"], ["care for", "to look after someone or something, especially someone who is young, old, or sick", "世話をする"], ["train", "to teach someone how to do something, usually a skill that is needed for a job", "訓練する、育成する"], ["trained", "having been prepared for a particular job or activity, by learning skills, getting qualifications, etc.", "訓練を受けた"], ["physical disability", "取得不可", "身体障害"], ["rewarding", "making you feel satisfied that you have done something well", "やりがいのある"], ["satisfying", "making you feel pleased by providing what you need or want", "満足のいく"], ["in the future", "beginning from now", "将来（に）"], ["benefit from", "取得不可", "〜から恩恵を受ける"], ["form a relationship with", "取得不可", "〜と関係を築く"], ["mature", "completely grown or developed", "成熟した"], ["lead", "to show someone where to go, usually by taking them to a place or by going in front of them", "導く、案内する"], ["signal", "a movement, light, or sound that gives information, or tells people what to do", "合図、信号"], ["alarm", "a loud noise that warns you of danger", "警報"], ["make a difference", "to have an effect on a situation", "違いを生む、影響を与える"], ["independently", "not wanting or needing anyone else to help you", "独立して、自力で"], ["independent", "not wanting or needing anyone else to help you or do things for you", "独立した、自立した"], ["a couple of", "two or a few things that are similar or the same, or two or a few people who are in some way connected", "2、3の、いくつかの"], ["get used to", "to become familiar with something or someone", "〜に慣れる"], ["advanced", "having developed or progressed to a late stage", "進んだ、上級の"], ["advance", "to develop or progress, or to make something develop or progress", "進歩する、前進する"], ["comfort", "to make someone feel better when they are anxious or sad", "慰める"], ["contact", "to telephone, email or write to someone", "連絡をとる"], ["volunteer", "to offer to do something without being asked or told to do it", "自発的に申し出る、ボランティアをする"], ["inventor", "someone who has invented something or whose job is to invent things", "発明者"], ["invention", "something that has never been made before, or the process of creating something that has never been made before", "発明"], ["invent", "to design and/or create something that has never been made before", "発明する"], ["basis (for)", "取得不可", "（〜の）基礎、根拠"], ["industry", "the companies and activities involved in the process of producing goods for sale, especially in a factory or special area", "産業"], ["private", "only for one person or group and not for everyone", "私的な、個人の"], ["research", "detailed study of a subject, especially in order to discover new information about something or reach a new understanding of it", "研究、調査"], ["laboratory", "a room or building with scientific equipment for doing scientific tests or for teaching science, or a place where chemicals or medicines are produced", "実験室、研究所"], ["modern", "designed and made using the most recent ideas and methods", "現代の、近代的な"], ["accomplishment", "something that is successful, or that is achieved after a lot of work or effort", "業績、達成"], ["constantly", "all the time or often", "絶えず"], ["convince", "to persuade someone or make someone certain", "納得させる、確信させる"], ["mainly", "usually or to a large degree", "主に"], ["purpose", "why you do something or why something exists", "目的"], ["gather", "to collect several things, often from different places or people", "集める"], ["reputation", "the opinion that people in general have about someone or something, or how much respect or admiration someone or something receives, based on past behavior or character", "評判"], ["associate with", "to spend time with a group of people, especially people who are disapproved of", "〜と付き合う、〜と関わる"], ["material", "a physical substance that things can be made from", "材料、素材"], ["distribution", "the process of giving things out to several people, or spreading or supplying something", "分配、流通"], ["equipment", "the set of necessary tools, clothing, etc. for a particular purpose", "設備、備品"], ["possible", "able to be done or achieved, or able to exist", "可能な"], ["method", "a particular way of doing something", "方法"], ["chemical", "any basic substance that is used in or produced by a reaction involving changes to atoms or molecules", "化学物質"], ["process", "a series of actions that you take in order to achieve a result", "過程、工程"], ["get married", "to begin a legal relationship with someone as their husband or wife", "結婚する"], ["be married", "取得不可", "結婚している"], ["quite a lot of", "取得不可", "かなり多くの"], ["looking back", "to think about something that happened in the past", "振り返ってみると"], ["communicate", "to share information with others by speaking, writing, moving your body, or using other signals", "意思疎通をする、伝える"], ["divorce", "an official or legal process to end a marriage", "離婚"], ["peaceful", "without violence", "平和な"], ["miss", "to feel sad that a person or thing is not present", "恋しく思う、寂しく思う"], ["affect", "to have an influence on someone or something, or to cause a change in someone or something", "影響を与える"], ["serious", "severe in effect; bad", "深刻な"], ["rather", "quite; to a slight degree", "かなり、むしろ"], ["boring", "not interesting or exciting", "退屈な"], ["reach", "to arrive at a place, especially after spending a long time or a lot of effort traveling", "到着する、達する"], ["embarrassed", "feeling ashamed or shy", "恥ずかしい、きまり悪い"], ["to one’s surprise", "取得不可", "驚いたことに"], ["continue to", "to keep happening, existing, or doing something, or to cause something or someone to do this", "〜し続ける"], ["spend a lot of time ...ing", "取得不可", "〜するのに多くの時間を費やす"], ["get to", "to begin to do or be", "〜するようになる"], ["realize", "to understand a situation, sometimes suddenly", "気づく、理解する"], ["thrilled", "extremely happy about something", "わくわくした、とても喜んだ"], ["thrill", "to make someone feel very excited and pleased", "わくわくさせる"], ["stable", "firmly fixed or not likely to move or change", "安定した"], ["make a choice", "to choose", "選択する"], ["accomplish", "to succeed in doing something good", "成し遂げる"], ["endangered", "animals or plants that may soon not exist because there are very few now alive", "絶滅の危険にさらされた"], ["be in danger of", "取得不可", "〜の危険がある"], ["involvement", "the state of being involved in an activity or event", "関わり、関係"], ["get involved in", "to do things and be part of an activity or event", "〜に関わる"], ["by accident", "without being intended", "偶然に"], ["be concerned about", "取得不可", "〜を心配している"], ["injured", "hurt", "傷ついた"], ["approach", "to come close in distance or time", "近づく、話をもちかける"], ["carry out", "to do or complete something, especially something that you have said you would do or that you have been told to do", "実行する"], ["in fact", "really", "実際に、実は"], ["in spite of", "although something exists or happens", "〜にもかかわらず"], ["finally", "after a long time or some difficulty", "最後に、ついに"], ["amazing", "very surprising", "驚くべき、見事な"], ["considering that", "取得不可", "〜ということを考えると"], ["unfortunately", "used to say that you wish something was not true or that something had not happened", "不運にも、あいにく"], ["release", "to allow a prisoner to be free", "解き放す、自由にする"], ["limited", "small in amount or number", "限られた、わずかの"], ["nature reserve", "a place where animals and plants live and are protected", "自然保護区"], ["at least", "as much as, or more than, a number or amount", "少なくとも"], ["no longer", "not now", "もはや〜ない"], ["completely", "in every way or as much as possible", "完全に"], ["take pride in", "取得不可", "〜を誇りに思う"], ["a great deal of", "取得不可", "多量の"], ["satisfaction", "the pleasant feeling you have when you get something that you wanted or do something that you wanted to do", "満足"]], "created": 1793400988599}};
+const KEY='eitango_v1';
+const lsGet=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return {}}};
+function all(){const o=lsGet(),m={...SEED};for(const k in o){if(o[k]===null)delete m[k];else m[k]=o[k]}return m}
+function write(id,d){
+  const o=lsGet();o[id]=d;
+  try{localStorage.setItem(KEY,JSON.stringify(o))}catch(e){throw new Error('このブラウザでは保存できません')}
+  folders=all();render();
+}
+db={doc:p=>{const id=p.split('/')[1];return{
+  set:async d=>write(id,d),
+  update:async d=>write(id,{...folders[id],...d}),
+  delete:async()=>write(id,null)}}};
+function exportData(){
+  const b=new Blob([JSON.stringify(folders,null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='eitango-folders.json';a.click();
+}
+folders=all();loaded=true;render();
+</script></body></html>
